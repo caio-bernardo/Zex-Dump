@@ -10,9 +10,11 @@ A `xxd` clone build with Zig Programming Language
 
 ## Acknowledgments
 
-I was inspired by:
+This project was inspired by:
 
 - Low Level Learning
 - Coding Challenges
 
 ## License
+
+This project is under the [MIT License](./LICENSE).
