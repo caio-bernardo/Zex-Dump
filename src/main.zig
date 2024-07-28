@@ -17,6 +17,7 @@ const Args = struct {
     little_endian: bool,
     // read_until: ?u32, //TODO: Implement this
     offset_decimal: bool,
+    num_cols: u8,
 };
 
 pub fn main() !void {
@@ -38,9 +39,10 @@ pub fn main() !void {
         std.process.exit(0);
     };
 
+    // TODO: handle this error
     const contents = try std.fs.cwd().readFileAlloc(allocator, args.file_path, MAX_BYTES);
 
-    const chunck_size = 16;
+    const chunck_size = args.num_cols;
     const chunks = contents.len / chunck_size + 1;
 
     for (1..chunks) |num| {
@@ -61,7 +63,7 @@ pub fn main() !void {
     }
 }
 /// Handle Cli Arguments
-pub fn handle_args(allocator: std.mem.Allocator) !Args {
+pub fn handle_args(allocator: std.mem.Allocator) ArgError!Args {
     var args = try std.process.argsWithAllocator(allocator);
     _ = args.skip(); // remove exe path
 
@@ -70,6 +72,8 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
     var file_path: ?[:0]const u8 = undefined;
     // var read_until: ?u32 = null;
     var offset_decimal = false;
+    var num_cols: u8 = 16;
+
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "-e")) {
             little_endian = true;
@@ -87,6 +91,9 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
             //     read_until = std.fmt.parseUnsigned(u16, buf, 10) catch return ArgError.NotaNumber;
         } else if (std.mem.eql(u8, arg, "-d")) {
             offset_decimal = true;
+        } else if (std.mem.eql(u8, arg, "-c")) {
+            const buf = args.next() orelse return ArgError.NoValueAfter;
+            num_cols = std.fmt.parseUnsigned(u8, buf, 10) catch return ArgError.NotaNumber;
         } else {
             file_path = arg;
         }
@@ -98,6 +105,7 @@ pub fn handle_args(allocator: std.mem.Allocator) !Args {
         .group_size = if (group_size == 0) 2 else group_size,
         // .read_until = read_until,
         .offset_decimal = offset_decimal,
+        .num_cols = num_cols,
     };
 }
 
