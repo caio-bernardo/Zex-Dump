@@ -109,6 +109,44 @@ pub fn handle_args(allocator: std.mem.Allocator) ArgError!Args {
     };
 }
 
+fn dump(
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    contents: []const u8,
+    limit: u8,
+    group_max_size: usize,
+) !void {
+    var group = try std.ArrayList(u8).initCapacity(allocator, group_max_size);
+    errdefer group.deinit();
+    var rows = try std.ArrayList([]u8).initCapacity(allocator, 16);
+    defer rows.deinit();
+    for (contents, 1..) |byte, byte_reads| {
+        group.append(byte) catch std.debug.print("Failed to append", .{});
+        if (group.items.len == group_max_size or byte_reads == contents.len or byte_reads == limit) {
+            const slice = try group.toOwnedSlice();
+            try rows.append(slice);
+        }
+
+        if (byte_reads == limit) {
+            break;
+        }
+    }
+
+    for (rows.items) |slice| {
+        // TODO: remove this by a formating function
+        std.debug.print("{d}", .{slice});
+        // need to free each slice
+        allocator.free(slice);
+    }
+
+    _ = writer;
+}
+
+test "dump-limit" {
+    const bytes = [16]u8{ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf };
+    try dump(std.testing.allocator, std.io.getStdOut(), bytes[0..], 11, 2);
+}
+
 fn display_bytes(bytes: []u8, group_size: u8) void {
     for (bytes, 1..) |byte, idx| {
         std.debug.print("{x:0>2}", .{byte});
