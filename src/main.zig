@@ -1,6 +1,6 @@
 const std = @import("std");
 
-// Max bytes to read from a file =
+// Max bytes to read from a file
 const MAX_BYTES = 1_000_000;
 
 const ArgError = error{
@@ -15,7 +15,7 @@ const Args = struct {
     file_path: [:0]const u8,
     group_size: u8 = 2,
     little_endian: bool,
-    // read_until: ?u32, //TODO: Implement this
+    read_limit: ?u32,
     offset_decimal: bool,
     num_cols: u8,
 };
@@ -42,24 +42,36 @@ pub fn main() !void {
     // TODO: handle this error
     const contents = try std.fs.cwd().readFileAlloc(allocator, args.file_path, MAX_BYTES);
 
-    const chunck_size = args.num_cols;
-    const chunks = contents.len / chunck_size + 1;
+    // TODO: calculate group_size considering row size
+    const groups = try dump(allocator, contents, args.read_limit, args.group_size);
+    defer {
+        for (groups) |group| {
+            allocator.free(group);
+        }
+        allocator.free(groups);
+    }
 
-    for (1..chunks) |num| {
-        const end = num * chunck_size;
-        const start = end - chunck_size;
+    const groups_per_row = args.num_cols / args.group_size;
+    const rows = groups.len / groups_per_row;
+    var end: u32 = groups_per_row;
+    var start: u32 = 0;
+    for (0..rows) |row_num| {
+        display_offset((row_num) * args.num_cols, args.offset_decimal);
 
-        display_offset(start, args.offset_decimal);
-
-        if (args.little_endian) {
-            display_as_little_endian(contents[start..end], args.group_size);
-        } else {
-            display_bytes(contents[start..end], args.group_size);
+        for (groups[start..end]) |group| {
+            for (group) |byte| {
+                std.debug.print("{x:0>2}", .{byte});
+            }
+            std.debug.print(" ", .{});
         }
 
-        display_as_text(contents[start..end]);
+        for (groups[start..end]) |group| {
+            display_as_text(group);
+        }
 
-        std.debug.print("\n", .{}); // TODO: remove debug prints for a stdout print
+        std.debug.print("\n", .{});
+        start = end;
+        end += groups_per_row;
     }
 }
 /// Handle Cli Arguments
@@ -70,7 +82,7 @@ pub fn handle_args(allocator: std.mem.Allocator) ArgError!Args {
     var little_endian = false;
     var group_size: u8 = 0;
     var file_path: ?[:0]const u8 = undefined;
-    // var read_until: ?u32 = null;
+    var read_limit: ?u32 = null;
     var offset_decimal = false;
     var num_cols: u8 = 16;
 
@@ -86,9 +98,9 @@ pub fn handle_args(allocator: std.mem.Allocator) ArgError!Args {
         } else if (std.mem.eql(u8, arg, "-g")) {
             const buf = args.next() orelse return ArgError.NoValueAfter;
             group_size = std.fmt.parseUnsigned(u8, buf, 10) catch return ArgError.NotaNumber;
-            // } else if (std.mem.eql(u8, arg, "-l")) {
-            //     const buf = args.next() orelse return ArgError.NoValueAfter;
-            //     read_until = std.fmt.parseUnsigned(u16, buf, 10) catch return ArgError.NotaNumber;
+        } else if (std.mem.eql(u8, arg, "-l")) {
+            const buf = args.next() orelse return ArgError.NoValueAfter;
+            read_limit = std.fmt.parseUnsigned(u16, buf, 10) catch return ArgError.NotaNumber;
         } else if (std.mem.eql(u8, arg, "-d")) {
             offset_decimal = true;
         } else if (std.mem.eql(u8, arg, "-c")) {
@@ -103,12 +115,56 @@ pub fn handle_args(allocator: std.mem.Allocator) ArgError!Args {
         .file_path = file_path orelse return ArgError.NoFilePath,
         .little_endian = little_endian,
         .group_size = if (group_size == 0) 2 else group_size,
-        // .read_until = read_until,
+        .read_limit = read_limit,
         .offset_decimal = offset_decimal,
         .num_cols = num_cols,
     };
 }
 
+/// Create a slice of slices of bytes, using `contents`, slice size defined by
+/// `group_max_size` and stop reading bytes at `read_limit` if defined.
+/// Caller owns the return data.
+fn dump(
+    allocator: std.mem.Allocator,
+    contents: []const u8,
+    read_limit: ?u32,
+    group_max_size: usize,
+) ![][]u8 {
+    const limit = read_limit orelse 0;
+
+    var group = try std.ArrayList(u8).initCapacity(allocator, group_max_size);
+    errdefer group.deinit();
+
+    var rows = std.ArrayList([]u8).init(allocator);
+    errdefer rows.deinit();
+
+    for (contents, 1..) |byte, byte_reads| {
+        try group.append(byte);
+        if (group.items.len == group_max_size or byte_reads == contents.len or limit == byte_reads) {
+            try rows.append(try group.toOwnedSlice());
+        }
+        if (byte_reads == limit) {
+            break;
+        }
+    }
+
+    return rows.toOwnedSlice();
+}
+
+test "dump-test" {
+    const allocator = std.testing.allocator;
+    const bytes = [16]u8{ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf };
+    const rows = try dump(allocator, bytes[0..], 16, 2);
+    defer {
+        for (rows) |row| {
+            allocator.free(row);
+        }
+        allocator.free(rows);
+    }
+    std.debug.print("{any}", .{rows});
+}
+
+// WARN: deprecated
 fn display_bytes(bytes: []u8, group_size: u8) void {
     for (bytes, 1..) |byte, idx| {
         std.debug.print("{x:0>2}", .{byte});
@@ -117,6 +173,7 @@ fn display_bytes(bytes: []u8, group_size: u8) void {
     }
 }
 
+// WARN: deprecated
 fn display_as_little_endian(bytes: []u8, group_size: u8) void {
     if (group_size > 16 or group_size & (group_size - 1) != 0) unreachable; // TODO: treat this error
 
