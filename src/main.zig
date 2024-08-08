@@ -1,6 +1,6 @@
 const std = @import("std");
 
-// Max bytes to read from a file =
+// Max bytes to read from a file
 const MAX_BYTES = 1_000_000;
 
 const ArgError = error{
@@ -52,18 +52,26 @@ pub fn main() !void {
     }
 
     const groups_per_row = args.num_cols / args.group_size;
-    const rows = groups.len / groups_per_row + 1;
-    for (1..rows) |row_num| {
-        const end = row_num * groups_per_row;
-        const start = end - groups_per_row;
-        display_offset(start, args.offset_decimal);
+    const rows = groups.len / groups_per_row;
+    var end: u32 = groups_per_row;
+    var start: u32 = 0;
+    for (0..rows) |row_num| {
+        display_offset((row_num) * args.num_cols, args.offset_decimal);
 
-        for (groups[start..end]) |byte| {
-            std.debug.print("{x:0>2}", .{byte});
+        for (groups[start..end]) |group| {
+            for (group) |byte| {
+                std.debug.print("{x:0>2}", .{byte});
+            }
+            std.debug.print(" ", .{});
         }
-        std.debug.print(" ", .{});
+
+        for (groups[start..end]) |group| {
+            display_as_text(group);
+        }
 
         std.debug.print("\n", .{});
+        start = end;
+        end += groups_per_row;
     }
 }
 /// Handle Cli Arguments
@@ -156,6 +164,7 @@ test "dump-test" {
     std.debug.print("{any}", .{rows});
 }
 
+// WARN: deprecated
 fn display_bytes(bytes: []u8, group_size: u8) void {
     for (bytes, 1..) |byte, idx| {
         std.debug.print("{x:0>2}", .{byte});
@@ -164,6 +173,7 @@ fn display_bytes(bytes: []u8, group_size: u8) void {
     }
 }
 
+// WARN: deprecated
 fn display_as_little_endian(bytes: []u8, group_size: u8) void {
     if (group_size > 16 or group_size & (group_size - 1) != 0) unreachable; // TODO: treat this error
 
