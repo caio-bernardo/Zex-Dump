@@ -10,7 +10,7 @@ A `xxd` clone build with Zig Programming Language
 ## Roadmap
 
 - [x] Dump the hexadecimal contents of a binary file
-- [ ] Implement most features of *xxd*
+- [x] Implement most features of *xxd*
 - [ ] Code Testing and Documentation
 - [ ] Add extended functionality
 - [ ] Improve Code Quality
