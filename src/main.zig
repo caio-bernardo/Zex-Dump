@@ -58,12 +58,7 @@ pub fn main() !void {
     for (0..rows) |row_num| {
         display_offset((row_num) * args.num_cols, args.offset_decimal);
 
-        for (groups[start..end]) |group| {
-            for (group) |byte| {
-                std.debug.print("{x:0>2}", .{byte});
-            }
-            std.debug.print(" ", .{});
-        }
+        if (args.little_endian) display_bytes_little_endian(groups[start..end]) else display_bytes(groups[start..end]);
 
         for (groups[start..end]) |group| {
             display_as_text(group);
@@ -164,32 +159,23 @@ test "dump-test" {
     std.debug.print("{any}", .{rows});
 }
 
-// WARN: deprecated
-fn display_bytes(bytes: []u8, group_size: u8) void {
-    for (bytes, 1..) |byte, idx| {
-        std.debug.print("{x:0>2}", .{byte});
-        const sep = if (idx % group_size == 0) " " else "";
-        std.debug.print("{s}", .{sep});
+fn display_bytes(group_bytes: [][]u8) void {
+    for (group_bytes) |group| {
+        for (group) |byte| {
+            std.debug.print("{x:0>2}", .{byte});
+        }
+        std.debug.print(" ", .{});
     }
 }
 
-// WARN: deprecated
-fn display_as_little_endian(bytes: []u8, group_size: u8) void {
-    if (group_size > 16 or group_size & (group_size - 1) != 0) unreachable; // TODO: treat this error
-
-    var start: u8 = 0;
-    var end = group_size;
-    const groups = bytes.len / group_size;
-    for (0..groups) |_| {
-        const slice = bytes[start..end];
-        var i = slice.len;
-        while (i > 0) {
-            i -= 1;
-            std.debug.print("{x:0>2}", .{slice[i]});
+fn display_bytes_little_endian(group_bytes: [][]u8) void {
+    for (group_bytes) |group| {
+        var idx = group.len;
+        while (idx > 0) {
+            idx -= 1;
+            std.debug.print("{x:0>2}", .{group[idx]});
         }
         std.debug.print(" ", .{});
-        start = end;
-        end += group_size;
     }
 }
 
