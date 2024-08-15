@@ -77,6 +77,36 @@ pub fn display_groups(groups: [][]u8, args: Args) void {
     }
 }
 
+fn display_contents(
+    contents: []const u8,
+    row_size: u8,
+    group_size: u8,
+) void {
+    var start: usize = 0;
+    var end: usize = row_size;
+    while (start < contents.len) {
+        std.debug.print("{x:0>8} ", .{start});
+        const row = contents[start..end];
+        for (row, 1..) |byte, read_count| {
+            std.debug.print("{x:0>2}", .{byte});
+            if (read_count % group_size == 0 or read_count == row.len) {
+                std.debug.print(" ", .{});
+            }
+        }
+        std.debug.print("bar...", .{});
+        std.debug.print("\n", .{});
+        start = end;
+        end = if (end + row_size <= contents.len) row_size + end else contents.len;
+    }
+}
+
+test "display-contents-test" {
+    const bytes = [_]u8{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31 };
+    const limit = bytes.len;
+    display_contents(bytes[0..limit], 8, 2);
+    std.debug.print("\n\n", .{});
+}
+
 /// Handle Cli Arguments
 pub fn handle_args(allocator: std.mem.Allocator) ArgError!Args {
     var args = try std.process.argsWithAllocator(allocator);
