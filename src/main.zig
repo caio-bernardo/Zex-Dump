@@ -42,39 +42,67 @@ pub fn main() !void {
     // TODO: handle this error
     const contents = try std.fs.cwd().readFileAlloc(allocator, args.file_path, MAX_BYTES);
 
-    // TODO: calculate group_size considering row size
-    const groups_max = if (args.group_size > args.num_cols) args.num_cols else args.group_size;
-    const groups = try dump(allocator, contents, args.read_limit, groups_max);
-    defer {
-        for (groups) |group| {
-            allocator.free(group);
-        }
-        allocator.free(groups);
-    }
-
-    display_groups(groups, args);
+    const limit = if (args.read_limit != null) args.read_limit.? else contents.len;
+    display_contents(
+        contents[0..limit],
+        args.num_cols,
+        args.group_size,
+        args.little_endian,
+        args.offset_decimal,
+    );
 }
 
-pub fn display_groups(groups: [][]u8, args: Args) void {
-    const groups_per_row = args.num_cols / args.group_size;
-    const rows = groups.len / groups_per_row;
+fn display_contents(
+    contents: []const u8,
+    row_size: u8,
+    group_size: u8,
+    revert_groups: bool, // TODO: think of a better implementation of this
+    off_set_decimal: bool,
+) void {
+    var start: usize = 0;
+    var end: usize = row_size;
+    while (start < contents.len) {
+        display_offset(start, off_set_decimal);
+        const row = contents[start..end];
 
-    var end: u32 = groups_per_row;
-    var start: u32 = 0;
+        var start_group: usize = 0;
+        var end_group: usize = group_size;
 
-    for (0..rows) |row_num| {
-        display_offset((row_num) * args.num_cols, args.offset_decimal);
+        while (start_group < end_group) {
+            const group = row[start_group..end_group];
+            // TODO: this is ugly, but works for now
+            if (revert_groups) {
+                var idx: usize = group.len;
+                while (idx != 0) {
+                    idx -= 1;
+                    std.debug.print("{x:0>2}", .{group[idx]});
+                }
+            } else {
+                for (group) |byte| {
+                    std.debug.print("{x:0>2}", .{byte});
+                }
+            }
 
-        if (args.little_endian) display_bytes_little_endian(groups[start..end]) else display_bytes(groups[start..end]);
+            // TODO: need to take into account that if a group is smaller than its size,
+            // it should print more spaces to not break the indentation of display text
+            std.debug.print(" ", .{});
 
-        for (groups[start..end]) |group| {
-            display_as_text(group);
+            start_group = end_group;
+            end_group = if (end_group + group_size <= row.len) end_group + group_size else row.len;
         }
 
+        display_as_text(row);
         std.debug.print("\n", .{});
         start = end;
-        end += groups_per_row;
+        end = if (end + row_size <= contents.len) row_size + end else contents.len;
     }
+}
+
+test "display-contents-test" {
+    const bytes = [_]u8{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31 };
+    const limit = bytes.len;
+    display_contents(bytes[0..limit], 8, 2);
+    std.debug.print("\n\n", .{});
 }
 
 /// Handle Cli Arguments
@@ -124,111 +152,7 @@ pub fn handle_args(allocator: std.mem.Allocator) ArgError!Args {
     };
 }
 
-/// Create a slice of slices of bytes, using `contents`, slice size defined by
-/// `group_max_size` and stop reading bytes at `read_limit` if defined.
-/// Caller owns the return data.
-fn dump(
-    allocator: std.mem.Allocator,
-    contents: []const u8,
-    read_limit: ?usize,
-    group_max_size: usize,
-) ![][]u8 {
-    const limit = if (read_limit != null and read_limit.? <= contents.len) read_limit.? else contents.len;
-
-    var group = try std.ArrayList(u8).initCapacity(allocator, group_max_size);
-    errdefer group.deinit();
-
-    var rows = std.ArrayList([]u8).init(allocator);
-    errdefer rows.deinit();
-
-    for (contents[0..limit], 1..) |byte, read_count| {
-        try group.append(byte);
-        if (group.items.len == group_max_size or read_count == limit) {
-            try rows.append(try group.toOwnedSlice());
-        }
-    }
-
-    return rows.toOwnedSlice();
-}
-
-test "dump-limit-fit-test" {
-    const allocator = std.testing.allocator;
-    const bytes = [_]u8{ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf };
-    const rows = try dump(allocator, bytes[0..], 16, 4);
-    defer {
-        for (rows) |row| {
-            allocator.free(row);
-        }
-        allocator.free(rows);
-    }
-    std.debug.print("{any}\n", .{rows});
-}
-
-test "dump-null-limit-test" {
-    const allocator = std.testing.allocator;
-    const bytes = [_]u8{ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12 };
-    const rows = try dump(allocator, bytes[0..], null, 4);
-    defer {
-        for (rows) |row| {
-            allocator.free(row);
-        }
-        allocator.free(rows);
-    }
-    std.debug.print("{any}\n", .{rows});
-}
-
-test "dump-large-limit-test" {
-    const allocator = std.testing.allocator;
-    const bytes = [_]u8{ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12 };
-    const rows = try dump(allocator, bytes[0..], 99, 4);
-    defer {
-        for (rows) |row| {
-            allocator.free(row);
-        }
-        allocator.free(rows);
-    }
-    std.debug.print("{any}\n", .{rows});
-}
-
-test "dump-small-limit-test" {
-    const allocator = std.testing.allocator;
-    const bytes = [_]u8{ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12 };
-    const rows = try dump(allocator, bytes[0..], 8, 4);
-    defer {
-        for (rows) |row| {
-            allocator.free(row);
-        }
-        allocator.free(rows);
-    }
-    std.debug.print("{any}\n", .{rows});
-}
-
-test "dump-odd-group-test" {
-    const allocator = std.testing.allocator;
-    const bytes = [_]u8{ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12 };
-    const rows = try dump(allocator, bytes[0..], null, 3);
-    defer {
-        for (rows) |row| {
-            allocator.free(row);
-        }
-        allocator.free(rows);
-    }
-    std.debug.print("{any}\n", .{rows});
-}
-
-test "dump-even-group-test" {
-    const allocator = std.testing.allocator;
-    const bytes = [_]u8{ 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12 };
-    const rows = try dump(allocator, bytes[0..], null, 4);
-    defer {
-        for (rows) |row| {
-            allocator.free(row);
-        }
-        allocator.free(rows);
-    }
-    std.debug.print("{any}\n", .{rows});
-}
-
+// WARN: Deprecated
 fn display_bytes(group_bytes: [][]u8) void {
     for (group_bytes) |group| {
         for (group) |byte| {
@@ -238,6 +162,7 @@ fn display_bytes(group_bytes: [][]u8) void {
     }
 }
 
+// WARN: Deprecated
 fn display_bytes_little_endian(group_bytes: [][]u8) void {
     for (group_bytes) |group| {
         var idx = group.len;
@@ -249,7 +174,7 @@ fn display_bytes_little_endian(group_bytes: [][]u8) void {
     }
 }
 
-fn display_as_text(bytes: []u8) void {
+fn display_as_text(bytes: []const u8) void {
     for (bytes) |byte| {
         std.debug.print("{c}", .{if (byte != 0) byte else '.'});
     }
