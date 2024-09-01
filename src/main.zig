@@ -162,18 +162,6 @@ fn display_bytes(group_bytes: [][]u8) void {
     }
 }
 
-// WARN: Deprecated
-fn display_bytes_little_endian(group_bytes: [][]u8) void {
-    for (group_bytes) |group| {
-        var idx = group.len;
-        while (idx > 0) {
-            idx -= 1;
-            std.debug.print("{x:0>2}", .{group[idx]});
-        }
-        std.debug.print(" ", .{});
-    }
-}
-
 fn display_as_text(bytes: []const u8) void {
     for (bytes) |byte| {
         std.debug.print("{c}", .{if (byte != 0) byte else '.'});
