@@ -152,16 +152,6 @@ pub fn handle_args(allocator: std.mem.Allocator) ArgError!Args {
     };
 }
 
-// WARN: Deprecated
-fn display_bytes(group_bytes: [][]u8) void {
-    for (group_bytes) |group| {
-        for (group) |byte| {
-            std.debug.print("{x:0>2}", .{byte});
-        }
-        std.debug.print(" ", .{});
-    }
-}
-
 fn display_as_text(bytes: []const u8) void {
     for (bytes) |byte| {
         std.debug.print("{c}", .{if (byte != 0) byte else '.'});
