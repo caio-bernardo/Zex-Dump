@@ -69,7 +69,6 @@ const Cli = struct {
 
             try self.display_row(contents[start..end]);
 
-            std.debug.print("{d}", .{row_size - (end - start)});
             try self.display_text(row);
 
             try self.writer.print("\n", .{});
