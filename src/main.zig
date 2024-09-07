@@ -85,9 +85,9 @@ const Cli = struct {
 
     fn display_offset(self: *Cli, offset: usize) !void {
         if (self.args.?.offset_decimal) {
-            try self.writer.print("{d:0>8}: ", .{offset});
+            try self.writer.print("{d:0>8}: ", .{offset + self.args.?.offset});
         } else {
-            try self.writer.print("{x:0>8}: ", .{offset});
+            try self.writer.print("{x:0>8}: ", .{offset + self.args.?.offset});
         }
     }
 
@@ -126,6 +126,7 @@ const Args = struct {
     offset_decimal: bool,
     num_cols: u8,
     seek: usize,
+    offset: usize,
 
     /// Handle Cli Arguments
     pub fn init(allocator: std.mem.Allocator) ArgError!Args {
@@ -139,6 +140,7 @@ const Args = struct {
         var offset_decimal = false;
         var num_cols: u8 = 16;
         var seek: usize = 0;
+        var offset: usize = 0;
 
         while (args.next()) |arg| {
             if (std.mem.eql(u8, arg, "-e")) {
@@ -163,6 +165,9 @@ const Args = struct {
             } else if (std.mem.eql(u8, arg, "-s")) {
                 const buf = args.next() orelse return ArgError.NoValueAfter;
                 seek = std.fmt.parseUnsigned(usize, buf, 10) catch return ArgError.NotaNumber;
+            } else if (std.mem.eql(u8, arg, "-o")) {
+                const buf = args.next() orelse return ArgError.NoValueAfter;
+                offset = std.fmt.parseUnsigned(usize, buf, 10) catch return ArgError.NotaNumber;
             } else {
                 file_path = arg;
             }
@@ -176,6 +181,7 @@ const Args = struct {
             .offset_decimal = offset_decimal,
             .num_cols = num_cols,
             .seek = seek,
+            .offset = offset,
         };
     }
 };
