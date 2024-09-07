@@ -48,7 +48,7 @@ const Cli = struct {
         const file_contents = try self.load();
 
         const limit = args.read_limit orelse file_contents.len;
-        try self.display_contents(file_contents[0..limit]);
+        try self.display_contents(file_contents[(self.args.?.seek)..(limit + self.args.?.seek)]);
     }
 
     fn load(self: *Cli) ![]u8 {
@@ -63,7 +63,7 @@ const Cli = struct {
         var start: usize = 0;
         var end: usize = row_size;
         while (start < contents.len) {
-            try self.display_offset(start);
+            try self.display_offset(start + self.args.?.seek);
 
             const row = contents[start..end];
 
@@ -125,6 +125,7 @@ const Args = struct {
     read_limit: ?usize,
     offset_decimal: bool,
     num_cols: u8,
+    seek: usize,
 
     /// Handle Cli Arguments
     pub fn init(allocator: std.mem.Allocator) ArgError!Args {
@@ -137,6 +138,7 @@ const Args = struct {
         var read_limit: ?usize = null;
         var offset_decimal = false;
         var num_cols: u8 = 16;
+        var seek: usize = 0;
 
         while (args.next()) |arg| {
             if (std.mem.eql(u8, arg, "-e")) {
@@ -158,6 +160,9 @@ const Args = struct {
             } else if (std.mem.eql(u8, arg, "-c")) {
                 const buf = args.next() orelse return ArgError.NoValueAfter;
                 num_cols = std.fmt.parseUnsigned(u8, buf, 10) catch return ArgError.NotaNumber;
+            } else if (std.mem.eql(u8, arg, "-s")) {
+                const buf = args.next() orelse return ArgError.NoValueAfter;
+                seek = std.fmt.parseUnsigned(usize, buf, 10) catch return ArgError.NotaNumber;
             } else {
                 file_path = arg;
             }
@@ -170,6 +175,7 @@ const Args = struct {
             .read_limit = read_limit,
             .offset_decimal = offset_decimal,
             .num_cols = num_cols,
+            .seek = seek,
         };
     }
 };
