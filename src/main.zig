@@ -59,7 +59,7 @@ const Cli = struct {
         self: *Cli,
         contents: []const u8,
     ) !void {
-        const row_size = self.args.?.num_cols;
+        const row_size = if (self.args.?.row_len < contents.len) self.args.?.row_len else contents.len;
         var start: usize = 0;
         var end: usize = row_size;
         while (start < contents.len) {
@@ -69,8 +69,8 @@ const Cli = struct {
 
             try self.display_row(contents[start..end]);
 
-            if (end - start < row_size) {
-                const spaces = row_size - (end - start) + 1;
+            if (end - start < self.args.?.row_len) {
+                const spaces = self.args.?.row_len - (end - start) + 1;
                 for (1..spaces) |spacechar| {
                     try self.writer.print("{c: >2}", .{' '});
                     if (spacechar % self.args.?.group_size == 0) {
@@ -103,7 +103,7 @@ const Cli = struct {
 
     fn display_row(self: *Cli, chunck: []const u8) !void {
         var start_group: usize = 0;
-        var end_group: usize = self.args.?.group_size;
+        var end_group: usize = if (self.args.?.group_size < chunck.len) self.args.?.group_size else chunck.len;
 
         while (start_group < end_group) {
             const group = chunck[start_group..end_group];
@@ -134,7 +134,7 @@ const Args = struct {
     little_endian: bool,
     read_limit: ?usize,
     offset_decimal: bool,
-    num_cols: u8,
+    row_len: u8,
     seek: usize,
     offset: usize,
 
@@ -148,7 +148,7 @@ const Args = struct {
         var file_path: ?[:0]const u8 = undefined;
         var read_limit: ?usize = null;
         var offset_decimal = false;
-        var num_cols: u8 = 16;
+        var row_len: u8 = 16;
         var seek: usize = 0;
         var offset: usize = 0;
 
@@ -171,7 +171,7 @@ const Args = struct {
                 offset_decimal = true;
             } else if (std.mem.eql(u8, arg, "-c")) {
                 const buf = args.next() orelse return ArgError.NoValueAfter;
-                num_cols = std.fmt.parseUnsigned(u8, buf, 10) catch return ArgError.NotaNumber;
+                row_len = std.fmt.parseUnsigned(u8, buf, 10) catch return ArgError.NotaNumber;
             } else if (std.mem.eql(u8, arg, "-s")) {
                 const buf = args.next() orelse return ArgError.NoValueAfter;
                 seek = std.fmt.parseUnsigned(usize, buf, 10) catch return ArgError.NotaNumber;
@@ -189,7 +189,7 @@ const Args = struct {
             .group_size = if (group_size == 0) 2 else group_size,
             .read_limit = read_limit,
             .offset_decimal = offset_decimal,
-            .num_cols = num_cols,
+            .row_len = row_len,
             .seek = seek,
             .offset = offset,
         };
