@@ -69,6 +69,16 @@ const Cli = struct {
 
             try self.display_row(contents[start..end]);
 
+            if (end - start < row_size) {
+                const spaces = row_size - (end - start) + 1;
+                for (1..spaces) |spacechar| {
+                    try self.writer.print("{c: >2}", .{' '});
+                    if (spacechar % self.args.?.group_size == 0) {
+                        try self.writer.print(" ", .{});
+                    }
+                }
+            }
+
             try self.display_text(row);
 
             try self.writer.print("\n", .{});
