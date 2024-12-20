@@ -21,7 +21,7 @@ const help_string =
     // \\	-r -s off   revert with <off> added to file positions found in hexdump.
     \\	-d          show offset in decimal instead of hex.
     \\	-s [+][-]seek  start at <seek> bytes abs. (or +: rel.) infile offset.
-    // \\	-u          use upper case hex letters.
+    \\	-u          use upper case hex letters.
     \\	-v          show version: "zex_dump 2024-07-11 by Caio Bernardo.".
 ;
 
@@ -140,11 +140,11 @@ const Cli = struct {
                 var idx: usize = group.len;
                 while (idx != 0) {
                     idx -= 1;
-                    try self.writer.print("{x:0>2}", .{group[idx]});
+                    if (self.args.?.upperhex) try self.writer.print("{X:0>2}", .{group[idx]}) else try self.writer.print("{x:0>2}", .{group[idx]});
                 }
             } else {
                 for (group) |byte| {
-                    try self.writer.print("{x:0>2}", .{byte});
+                    if (self.args.?.upperhex) try self.writer.print("{X:0>2}", .{byte}) else try self.writer.print("{x:0>2}", .{byte});
                 }
             }
 
@@ -165,6 +165,7 @@ const Args = struct {
     row_len: u8,
     seek: usize,
     offset: usize,
+    upperhex: bool,
 
     /// Handle Cli Arguments
     pub fn init(allocator: std.mem.Allocator) ArgError!Args {
@@ -179,6 +180,7 @@ const Args = struct {
         var row_len: u8 = 16;
         var seek: usize = 0;
         var offset: usize = 0;
+        var upperhex: bool = false;
 
         while (args.next()) |arg| {
             if (std.mem.eql(u8, arg, "-c")) {
@@ -208,6 +210,8 @@ const Args = struct {
             } else if (std.mem.eql(u8, arg, "-s")) {
                 const buf = args.next() orelse return ArgError.NoValueAfter;
                 seek = std.fmt.parseUnsigned(usize, buf, 10) catch return ArgError.NotaNumber;
+            } else if (std.mem.eql(u8, arg, "-u")) {
+                upperhex = true;
             } else if (std.mem.eql(u8, arg, "-v")) {
                 return ArgError.VersionString;
             } else {
@@ -217,13 +221,14 @@ const Args = struct {
 
         return .{
             .file_path = file_path orelse return ArgError.NoFilePath,
-            .little_endian = little_endian,
             .group_size = if (group_size == 0) 2 else group_size,
-            .read_limit = read_limit,
+            .little_endian = little_endian,
+            .offset = offset,
             .offset_decimal = offset_decimal,
+            .read_limit = read_limit,
             .row_len = row_len,
             .seek = seek,
-            .offset = offset,
+            .upperhex = upperhex,
         };
     }
 };
