@@ -7,13 +7,12 @@ A `xxd` clone build with Zig Programming Language
 - Display a file as hex, with offset and ascii format
 - Customize bytes groupings, endianess, by offset and more..
 
+## How to use
+
 ## Roadmap
 
-- [x] Dump the hexadecimal contents of a binary file
-- [x] Implement most features of *xxd*
-- [ ] Code Testing and Documentation
-- [ ] Add extended functionality
-- [ ] Improve Code Quality
+- [x] Basic `xxd` features
+- [ ] More complex things (outfile, output to C style, ...)
 
 ## Acknowledgments
 
@@ -21,6 +20,7 @@ This project was inspired by:
 
 - Low Level Learning
 - Coding Challenges
+- `xxd` tool
 
 ## License
 
