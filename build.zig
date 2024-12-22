@@ -24,6 +24,9 @@ pub fn build(b: *std.Build) void {
     //     .optimize = optimize,
     // });
 
+    const lib_cli = b.addModule("cli", .{ .root_source_file = .{ .cwd_relative = "src/cli.zig" } });
+    const lib_args_parse = b.addModule("args_parse", .{ .root_source_file = .{ .cwd_relative = "src/args_parse.zig" } });
+
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).
@@ -36,6 +39,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    lib_cli.addImport("args_parse", lib_args_parse);
+    exe.root_module.addImport("cli", lib_cli);
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
