@@ -32,7 +32,7 @@ pub const Args = struct {
                 arg_parsed.offset_decimal = true;
             } else if (std.mem.eql(u8, arg, "-e")) {
                 arg_parsed.little_endian = true;
-                if (arg_parsed.group_size == 0) {
+                if (arg_parsed.group_size == 2) {
                     arg_parsed.group_size = 4;
                     // Check if group_size is a power of 2
                 } else if (arg_parsed.group_size <= 16 and (arg_parsed.group_size & (arg_parsed.group_size - 1)) == 0) {

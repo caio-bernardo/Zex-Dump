@@ -33,11 +33,11 @@ const MAX_FILE_SIZE = 1024 * 1024;
 
 pub const Cli = struct {
     alloc: std.mem.Allocator,
-    args: ?argp.Args,
+    args: argp.Args = undefined,
     writer: std.fs.File.Writer,
 
     pub fn new(allocator: std.mem.Allocator, writer: anytype) Cli {
-        return .{ .alloc = allocator, .args = null, .writer = writer };
+        return .{ .alloc = allocator, .writer = writer };
     }
 
     pub fn run(self: *Cli) !void {
@@ -54,7 +54,7 @@ pub const Cli = struct {
                     try self.writer.print(version_string, .{});
                 },
                 else => {
-                    std.debug.print("Something went wrong!", .{});
+                    std.debug.print("Failed to parse arguments: {}", .{err});
                 },
             }
             std.process.exit(0);
@@ -64,46 +64,55 @@ pub const Cli = struct {
         // TODO: handle error
         const file_contents = try self.load_file();
 
-        // if (self.args.?.revert) try self.hex_to_bin(file_contents) else {
-        const limit = args.read_limit orelse file_contents.len;
+        // if (self.args.revert) try self.hex_to_bin(file_contents) else {
+        const limit = @min(args.read_limit orelse file_contents.len, file_contents.len);
         // TODO: handle this error
-        try self.display_contents(file_contents[(self.args.?.seek)..(limit + self.args.?.seek)]);
+        // try self.display_contents(file_contents[(self.args.seek)..(limit + self.args.seek)]);
         // }
+        try self.dump_lines(file_contents[(self.args.seek)..(limit + self.args.seek)]);
     }
 
     fn load_file(self: *Cli) ![]u8 {
-        return try std.fs.cwd().readFileAlloc(self.alloc, self.args.?.file_path, MAX_FILE_SIZE);
+        return try std.fs.cwd().readFileAlloc(self.alloc, self.args.file_path, MAX_FILE_SIZE);
     }
 
-    fn display_contents(
-        self: *Cli,
-        contents: []const u8,
-    ) !void {
-        const row_size = if (self.args.?.row_len < contents.len) self.args.?.row_len else contents.len;
-        var start: usize = 0;
-        var end: usize = row_size;
-        while (start < contents.len) {
-            try self.display_offset(start + self.args.?.seek);
+    fn dump_lines(self: *Cli, contents: []const u8) !void {
+        // Split the string by rows of max args.row_len
+        // Split each row by max args.group_size
+        // If little endian is on, revert each group
+        var lines = std.mem.window(u8, contents, self.args.row_len, self.args.row_len);
+        var line_id: usize = 0;
+        while (lines.next()) |line| {
+            try self.display_offset(line_id * self.args.row_len + self.args.seek);
 
-            const row = contents[start..end];
-
-            try self.display_row(contents[start..end]);
-
-            if (end - start < self.args.?.row_len) {
-                const spaces = self.args.?.row_len - (end - start) + 1;
-                for (1..spaces) |spacechar| {
-                    try self.writer.print("{c: >2}", .{' '});
-                    if (spacechar % self.args.?.group_size == 0) {
-                        try self.writer.print(" ", .{});
-                    }
-                }
+            var groups = std.mem.window(u8, line, self.args.group_size, self.args.group_size);
+            while (groups.next()) |group| {
+                try self.display_group(group);
             }
 
-            try self.display_text(row);
+            try self.spacing(line.len);
 
+            self.display_text(line) catch std.debug.print("Failed to print line", .{});
             try self.writer.print("\n", .{});
-            start = end;
-            end = if (end + row_size <= contents.len) row_size + end else contents.len;
+
+            line_id += 1;
+        }
+    }
+
+    fn print_as_hex(self: *Cli, byte: u8) !void {
+        if (self.args.upperhex) {
+            try self.writer.print("{X:0>2}", .{byte});
+        } else {
+            try self.writer.print("{x:0>2}", .{byte});
+        }
+    }
+
+    fn spacing(self: *Cli, line_length: usize) !void {
+        for (1..(self.args.row_len - line_length + 1)) |i| {
+            try self.writer.print("{c: >2}", .{' '});
+            if (i % self.args.group_size == 0) {
+                try self.writer.print(" ", .{});
+            }
         }
     }
 
@@ -114,36 +123,26 @@ pub const Cli = struct {
     }
 
     fn display_offset(self: *Cli, offset: usize) !void {
-        if (self.args.?.offset_decimal) {
-            try self.writer.print("{d:0>8}: ", .{offset + self.args.?.offset});
+        if (self.args.offset_decimal) {
+            try self.writer.print("{d:0>8}: ", .{offset + self.args.offset});
         } else {
-            try self.writer.print("{x:0>8}: ", .{offset + self.args.?.offset});
+            try self.writer.print("{x:0>8}: ", .{offset + self.args.offset});
         }
     }
 
-    fn display_row(self: *Cli, chunck: []const u8) !void {
-        var start_group: usize = 0;
-        var end_group: usize = if (self.args.?.group_size < chunck.len) self.args.?.group_size else chunck.len;
-
-        while (start_group < end_group) {
-            const group = chunck[start_group..end_group];
-            // TODO: this is ugly, but works for now
-            if (self.args.?.little_endian) {
-                var idx: usize = group.len;
-                while (idx != 0) {
-                    idx -= 1;
-                    if (self.args.?.upperhex) try self.writer.print("{X:0>2}", .{group[idx]}) else try self.writer.print("{x:0>2}", .{group[idx]});
-                }
-            } else {
-                for (group) |byte| {
-                    if (self.args.?.upperhex) try self.writer.print("{X:0>2}", .{byte}) else try self.writer.print("{x:0>2}", .{byte});
-                }
+    fn display_group(self: *Cli, group: []const u8) !void {
+        // if little endian revert group
+        if (self.args.little_endian) {
+            var iter = std.mem.reverseIterator(group);
+            while (iter.next()) |byte| {
+                try self.print_as_hex(byte);
             }
-
-            try self.writer.print(" ", .{});
-
-            start_group = end_group;
-            end_group = if (end_group + self.args.?.group_size <= chunck.len) end_group + self.args.?.group_size else chunck.len;
+        } else {
+            for (group) |byte| {
+                try self.print_as_hex(byte);
+            }
         }
+
+        try self.writer.print(" ", .{});
     }
 };
