@@ -3,6 +3,7 @@ const std = @import("std");
 pub const ArgError = error{ NotaNumber, NoValueAfter, NoFilePath, NotOctet, InitError, HelpString, VersionString, AllocationFailed };
 
 pub const Args = struct {
+    autoskip: bool = false,
     file_path: [:0]const u8 = undefined,
     group_size: u8 = 2,
     little_endian: bool = false,
@@ -25,7 +26,9 @@ pub const Args = struct {
         var file_path: ?[:0]const u8 = null;
 
         while (args.next()) |arg| {
-            if (std.mem.eql(u8, arg, "-c")) {
+            if (std.mem.eql(u8, arg, "-a")) {
+                arg_parsed.autoskip = true;
+            } else if (std.mem.eql(u8, arg, "-c")) {
                 const buf = args.next() orelse return ArgError.NoValueAfter;
                 arg_parsed.row_len = std.fmt.parseUnsigned(u8, buf, 10) catch return ArgError.NotaNumber;
             } else if (std.mem.eql(u8, arg, "-d")) {

@@ -8,7 +8,7 @@ const help_string =
     \\Usage:
     \\	zxd [options] [infile]
     \\Options:
-    // \\	-a          toggle autoskip: A single '*' replaces nul-lines.Default off.
+    \\	-a          toggle autoskip: nul-lines are not displayed. Default off.
     // \\	-b          binary digit dump (incompatible with -ps,-i,-r). Default hex.
     // \\	-C          capitalize variable names in C include file style (-i).
     \\	-c cols     format <cols> octets per line. Default 16 (-i: 12, -ps: 30).
@@ -23,7 +23,7 @@ const help_string =
     // \\	-r          reverse operation: convert (or patch) hexdump into binary.
     // \\	-r -s off   revert with <off> added to file positions found in hexdump.
     \\	-d          show offset in decimal instead of hex.
-    \\	-s [+][-]seek  start at <seek> bytes abs. (or +: rel.) infile offset.
+    \\	-s seek     start at <seek> bytes abs.  
     \\	-u          use upper case hex letters.
     \\	-v          show version: "zxd 2024-07-11 by Caio Bernardo.".
 ;
@@ -64,12 +64,11 @@ pub const Cli = struct {
         // TODO: handle error
         const file_contents = try self.load_file();
 
-        // if (self.args.revert) try self.hex_to_bin(file_contents) else {
         const limit = @min(args.read_limit orelse file_contents.len, file_contents.len);
         // TODO: handle this error
-        // try self.display_contents(file_contents[(self.args.seek)..(limit + self.args.seek)]);
-        // }
-        try self.dump_lines(file_contents[(self.args.seek)..(limit + self.args.seek)]);
+        const start = @max(self.args.seek, 0);
+        const end = @min(limit, limit + self.args.seek);
+        try self.dump_lines(file_contents[start..end]);
     }
 
     fn load_file(self: *Cli) ![]u8 {
@@ -77,13 +76,14 @@ pub const Cli = struct {
     }
 
     fn dump_lines(self: *Cli, contents: []const u8) !void {
-        // Split the string by rows of max args.row_len
-        // Split each row by max args.group_size
-        // If little endian is on, revert each group
         var lines = std.mem.window(u8, contents, self.args.row_len, self.args.row_len);
         var line_id: usize = 0;
         while (lines.next()) |line| {
-            try self.display_offset(line_id * self.args.row_len + self.args.seek);
+            line_id += 1;
+            if (self.args.autoskip and std.mem.allEqual(u8, line, 0)) {
+                continue;
+            }
+            try self.display_offset((line_id - 1) * self.args.row_len + self.args.seek);
 
             var groups = std.mem.window(u8, line, self.args.group_size, self.args.group_size);
             while (groups.next()) |group| {
@@ -94,8 +94,6 @@ pub const Cli = struct {
 
             self.display_text(line) catch std.debug.print("Failed to print line", .{});
             try self.writer.print("\n", .{});
-
-            line_id += 1;
         }
     }
 
