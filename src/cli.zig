@@ -20,7 +20,7 @@ const help_string =
     \\	-l len      stop after <len> octets.
     \\	-o off      add <off> to the displayed file position.
     // \\	-ps         output in postscript plain hexdump style.
-    // \\	-r          reverse operation: convert (or patch) hexdump into binary.
+    \\	-r          reverse operation: convert (or patch) hexdump into binary.
     // \\	-r -s off   revert with <off> added to file positions found in hexdump.
     \\	-d          show offset in decimal instead of hex.
     \\	-s seek     start at <seek> bytes abs.  
@@ -54,7 +54,7 @@ pub const Cli = struct {
                     try self.writer.print(version_string, .{});
                 },
                 else => {
-                    std.debug.print("Failed to parse arguments: {}", .{err});
+                    std.debug.print("Failed to parse arguments: {}. Check the docs!", .{err});
                 },
             }
             std.process.exit(0);
@@ -64,18 +64,38 @@ pub const Cli = struct {
         // TODO: handle error
         const file_contents = try self.load_file();
 
-        const limit = @min(args.read_limit orelse file_contents.len, file_contents.len);
-        // TODO: handle this error
-        const start = @max(self.args.seek, 0);
-        const end = @min(limit, limit + self.args.seek);
-        try self.dump_lines(file_contents[start..end]);
+        if (self.args.revert) {
+            try self.hex_to_bin(file_contents);
+        } else {
+            const limit = @min(args.read_limit orelse file_contents.len, file_contents.len);
+            const start = self.args.seek;
+            const end = @min(limit, limit + self.args.seek);
+            // TODO: handle this error
+            try self.dump_fmt_lines(file_contents[start..end]);
+        }
     }
 
     fn load_file(self: *Cli) ![]u8 {
         return try std.fs.cwd().readFileAlloc(self.alloc, self.args.file_path, MAX_FILE_SIZE);
     }
 
-    fn dump_lines(self: *Cli, contents: []const u8) !void {
+    fn hex_to_bin(self: *Cli, contents: []const u8) !void {
+        // Read per line
+        var lines = std.mem.tokenizeAny(u8, contents, "\n");
+        while (lines.next()) |line| {
+            // Split by the offset mark
+            var parts = std.mem.tokenizeAny(u8, line, ":");
+            _ = parts.next(); // Remove offset
+            var group = std.mem.tokenizeSequence(u8, parts.next() orelse continue, "  "); // Split by hex and text section
+            var hexes = std.mem.tokenizeAny(u8, group.next() orelse continue, " "); // Split group section in its group of hexes
+            var out: [32:0]u8 = undefined;
+            while (hexes.next()) |hexstr| {
+                try self.writer.print("{s}", .{try std.fmt.hexToBytes(&out, hexstr)});
+            }
+        }
+    }
+
+    fn dump_fmt_lines(self: *Cli, contents: []const u8) !void {
         var lines = std.mem.window(u8, contents, self.args.row_len, self.args.row_len);
         var line_id: usize = 0;
         while (lines.next()) |line| {
@@ -106,7 +126,7 @@ pub const Cli = struct {
     }
 
     fn spacing(self: *Cli, line_length: usize) !void {
-        for (1..(self.args.row_len - line_length + 1)) |i| {
+        for (1..(self.args.row_len - line_length + 2)) |i| {
             try self.writer.print("{c: >2}", .{' '});
             if (i % self.args.group_size == 0) {
                 try self.writer.print(" ", .{});
